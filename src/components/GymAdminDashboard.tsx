@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Member, PaymentPlan, Attendance, User } from '../types';
 import { Button } from './ui/button';
@@ -8,7 +7,7 @@ import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { toast } from '@/hooks/use-toast';
-import { Plus, Edit, Trash2, Users, CreditCard, Calendar, LogOut, UserPlus } from 'lucide-react';
+import { Plus, Edit, Trash2, Users, CreditCard, Calendar, LogOut, UserPlus, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export const GymAdminDashboard: React.FC = () => {
@@ -164,10 +163,16 @@ export const GymAdminDashboard: React.FC = () => {
       a.memberId === memberId && a.date === today
     );
 
-    if (existingAttendance) {
+    if (existingAttendance && !existingAttendance.checkOut) {
+      // Member is already checked in, so this is a checkout
+      markCheckout(existingAttendance.id);
+      return;
+    }
+
+    if (existingAttendance && existingAttendance.checkOut) {
       toast({
         title: "Info",
-        description: "Attendance already marked for today",
+        description: "Member has already completed attendance for today",
       });
       return;
     }
@@ -187,8 +192,49 @@ export const GymAdminDashboard: React.FC = () => {
     loadData();
     toast({
       title: "Success",
-      description: "Attendance marked successfully",
+      description: "Check-in marked successfully",
     });
+  };
+
+  const markCheckout = (attendanceId: string) => {
+    const allAttendance = JSON.parse(localStorage.getItem('gymSystemAttendance') || '[]');
+    const updatedAttendance = allAttendance.map((a: Attendance) => 
+      a.id === attendanceId ? { ...a, checkOut: new Date().toLocaleTimeString() } : a
+    );
+    
+    localStorage.setItem('gymSystemAttendance', JSON.stringify(updatedAttendance));
+    loadData();
+    
+    toast({
+      title: "Success",
+      description: "Check-out marked successfully",
+    });
+  };
+
+  const calculateDuration = (checkIn: string, checkOut?: string) => {
+    if (!checkOut) return 'In progress';
+    
+    const checkInTime = new Date(`1970-01-01 ${checkIn}`);
+    const checkOutTime = new Date(`1970-01-01 ${checkOut}`);
+    const diffMs = checkOutTime.getTime() - checkInTime.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (diffHours > 0) {
+      return `${diffHours}h ${diffMinutes}m`;
+    }
+    return `${diffMinutes}m`;
+  };
+
+  const getMemberAttendanceStatus = (memberId: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    const todayAttendance = attendance.find(a => 
+      a.memberId === memberId && a.date === today
+    );
+    
+    if (!todayAttendance) return 'not_present';
+    if (todayAttendance.checkOut) return 'completed';
+    return 'checked_in';
   };
 
   const resetMemberForm = () => {
@@ -334,51 +380,75 @@ export const GymAdminDashboard: React.FC = () => {
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {members.map((member) => (
-                <Card key={member.id} className="shadow-lg hover:shadow-xl transition-shadow">
-                  <CardHeader className="bg-gradient-to-r from-blue-500 to-cyan-600 text-white">
-                    <CardTitle className="flex items-center justify-between">
-                      <span className="flex items-center">
-                        <UserPlus className="mr-2 h-5 w-5" />
-                        {member.name}
-                      </span>
-                      <div className="flex space-x-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => editMember(member)}
-                          className="text-white hover:bg-white/20"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => markAttendance(member.id)}
-                          className="text-white hover:bg-green-500/20"
-                        >
-                          <Calendar className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-4">
-                    <div className="space-y-2 text-sm">
-                      <p><strong>Email:</strong> {member.email || 'Not provided'}</p>
-                      <p><strong>Phone:</strong> {member.phone || 'Not provided'}</p>
-                      <p><strong>Username:</strong> {member.username}</p>
-                      <p><strong>Join Date:</strong> {new Date(member.joinDate).toLocaleDateString()}</p>
-                      <p><strong>Status:</strong> 
-                        <span className={`ml-1 px-2 py-1 rounded-full text-xs ${
-                          member.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                          {member.isActive ? 'Active' : 'Inactive'}
+              {members.map((member) => {
+                const attendanceStatus = getMemberAttendanceStatus(member.id);
+                return (
+                  <Card key={member.id} className="shadow-lg hover:shadow-xl transition-shadow">
+                    <CardHeader className="bg-gradient-to-r from-blue-500 to-cyan-600 text-white">
+                      <CardTitle className="flex items-center justify-between">
+                        <span className="flex items-center">
+                          <UserPlus className="mr-2 h-5 w-5" />
+                          {member.name}
                         </span>
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                        <div className="flex space-x-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => editMember(member)}
+                            className="text-white hover:bg-white/20"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => markAttendance(member.id)}
+                            className={`text-white ${
+                              attendanceStatus === 'checked_in' 
+                                ? 'hover:bg-red-500/20' 
+                                : attendanceStatus === 'completed'
+                                ? 'hover:bg-gray-500/20'
+                                : 'hover:bg-green-500/20'
+                            }`}
+                            disabled={attendanceStatus === 'completed'}
+                          >
+                            {attendanceStatus === 'checked_in' ? (
+                              <Clock className="h-4 w-4" />
+                            ) : (
+                              <Calendar className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4">
+                      <div className="space-y-2 text-sm">
+                        <p><strong>Email:</strong> {member.email || 'Not provided'}</p>
+                        <p><strong>Phone:</strong> {member.phone || 'Not provided'}</p>
+                        <p><strong>Username:</strong> {member.username}</p>
+                        <p><strong>Join Date:</strong> {new Date(member.joinDate).toLocaleDateString()}</p>
+                        <p><strong>Status:</strong> 
+                          <span className={`ml-1 px-2 py-1 rounded-full text-xs ${
+                            member.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            {member.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </p>
+                        <p><strong>Today:</strong> 
+                          <span className={`ml-1 px-2 py-1 rounded-full text-xs ${
+                            attendanceStatus === 'checked_in' ? 'bg-blue-100 text-blue-800' :
+                            attendanceStatus === 'completed' ? 'bg-green-100 text-green-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {attendanceStatus === 'checked_in' ? 'Checked In' :
+                             attendanceStatus === 'completed' ? 'Completed' : 'Not Present'}
+                          </span>
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           </TabsContent>
 
@@ -496,12 +566,25 @@ export const GymAdminDashboard: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {attendance.map((record) => {
                 const member = members.find(m => m.id === record.memberId);
+                const duration = calculateDuration(record.checkIn, record.checkOut);
                 return (
                   <Card key={record.id} className="shadow-lg">
                     <CardHeader className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white">
-                      <CardTitle className="flex items-center">
-                        <Calendar className="mr-2 h-5 w-5" />
-                        {member?.name || 'Unknown Member'}
+                      <CardTitle className="flex items-center justify-between">
+                        <span className="flex items-center">
+                          <Calendar className="mr-2 h-5 w-5" />
+                          {member?.name || 'Unknown Member'}
+                        </span>
+                        {!record.checkOut && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => markCheckout(record.id)}
+                            className="text-white hover:bg-white/20"
+                          >
+                            <Clock className="h-4 w-4" />
+                          </Button>
+                        )}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="p-4">
@@ -511,6 +594,13 @@ export const GymAdminDashboard: React.FC = () => {
                         {record.checkOut && (
                           <p><strong>Check Out:</strong> {record.checkOut}</p>
                         )}
+                        <p><strong>Duration:</strong> 
+                          <span className={`ml-1 px-2 py-1 rounded-full text-xs ${
+                            record.checkOut ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {duration}
+                          </span>
+                        </p>
                       </div>
                     </CardContent>
                   </Card>
