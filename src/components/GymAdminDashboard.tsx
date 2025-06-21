@@ -9,6 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { toast } from '@/hooks/use-toast';
 import { Plus, Edit, Trash2, Users, CreditCard, Calendar, LogOut, UserPlus, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import html2canvas from 'html2canvas';
+import { QrCode, Download } from 'lucide-react';
 
 export const GymAdminDashboard: React.FC = () => {
   const [members, setMembers] = useState<Member[]>([]);
@@ -18,6 +20,7 @@ export const GymAdminDashboard: React.FC = () => {
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const { user, logout } = useAuth();
+  const [gymData, setGymData] = useState<any>(null);
 
   const [memberForm, setMemberForm] = useState({
     username: '',
@@ -44,8 +47,15 @@ export const GymAdminDashboard: React.FC = () => {
   useEffect(() => {
     if (user?.gymId) {
       loadData();
+      loadGymData();
     }
   }, [user]);
+
+  const loadGymData = () => {
+    const storedGyms = JSON.parse(localStorage.getItem('gymSystemGyms') || '[]');
+    const gym = storedGyms.find((g: any) => g.id === user?.gymId);
+    setGymData(gym);
+  };
 
   const loadData = () => {
     const storedMembers = JSON.parse(localStorage.getItem('gymSystemMembers') || '[]');
@@ -270,6 +280,30 @@ export const GymAdminDashboard: React.FC = () => {
     setShowMemberForm(true);
   };
 
+  const downloadQRCode = async () => {
+    const qrElement = document.getElementById('gym-qr-code');
+    if (qrElement) {
+      try {
+        const canvas = await html2canvas(qrElement);
+        const link = document.createElement('a');
+        link.download = `${gymData?.name || 'gym'}-qr-code.png`;
+        link.href = canvas.toDataURL();
+        link.click();
+        
+        toast({
+          title: "Success",
+          description: "QR code downloaded successfully",
+        });
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to download QR code",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white shadow-sm border-b px-6 py-4">
@@ -287,10 +321,11 @@ export const GymAdminDashboard: React.FC = () => {
 
       <div className="container mx-auto p-6">
         <Tabs defaultValue="members" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+          <TabsList className="grid w-full grid-cols-4 lg:w-[500px]">
             <TabsTrigger value="members">Members</TabsTrigger>
             <TabsTrigger value="payments">Payments</TabsTrigger>
             <TabsTrigger value="attendance">Attendance</TabsTrigger>
+            <TabsTrigger value="profile">Profile</TabsTrigger>
           </TabsList>
 
           <TabsContent value="members" className="space-y-6">
@@ -613,6 +648,71 @@ export const GymAdminDashboard: React.FC = () => {
                 <Calendar className="mx-auto h-12 w-12 text-gray-400" />
                 <h3 className="mt-2 text-sm font-medium text-gray-900">No attendance records</h3>
                 <p className="mt-1 text-sm text-gray-500">Attendance will appear here as members check in.</p>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="profile" className="space-y-6">
+            <h2 className="text-xl font-semibold text-gray-700">Gym Profile</h2>
+            
+            {gymData && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="shadow-lg">
+                  <CardHeader className="bg-indigo-50">
+                    <CardTitle className="text-indigo-800">Gym Information</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <div className="space-y-4">
+                      <div className="flex justify-between">
+                        <span className="font-medium text-gray-600">Name:</span>
+                        <span className="text-gray-800">{gymData.name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium text-gray-600">Address:</span>
+                        <span className="text-gray-800">{gymData.address || 'Not provided'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium text-gray-600">Phone:</span>
+                        <span className="text-gray-800">{gymData.phone || 'Not provided'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium text-gray-600">Email:</span>
+                        <span className="text-gray-800">{gymData.email || 'Not provided'}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="shadow-lg">
+                  <CardHeader className="bg-green-50">
+                    <CardTitle className="text-green-800 flex items-center">
+                      <QrCode className="mr-2 h-5 w-5" />
+                      Attendance QR Code
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <div className="text-center space-y-4">
+                      <div id="gym-qr-code" className="bg-white p-4 rounded-lg inline-block">
+                        <img 
+                          src={gymData.qrCode} 
+                          alt="Gym QR Code" 
+                          className="w-48 h-48 mx-auto"
+                        />
+                        <p className="text-sm text-gray-600 mt-2">{gymData.name}</p>
+                      </div>
+                      <Button 
+                        onClick={downloadQRCode}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Download QR Code
+                      </Button>
+                      <p className="text-xs text-gray-500">
+                        Members can scan this QR code to mark their attendance
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             )}
           </TabsContent>

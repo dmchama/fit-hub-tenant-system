@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Member, PaymentPlan, Attendance } from '../types';
 import { Button } from './ui/button';
@@ -6,11 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { toast } from '@/hooks/use-toast';
 import { User, CreditCard, Calendar, LogOut, Activity } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { QRCodeScanner } from './QRCodeScanner';
+import { Camera } from 'lucide-react';
 
 export const MemberDashboard: React.FC = () => {
   const [memberData, setMemberData] = useState<Member | null>(null);
   const [paymentPlans, setPaymentPlans] = useState<PaymentPlan[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<Attendance[]>([]);
+  const [showQRScanner, setShowQRScanner] = useState(false);
   const { user, logout } = useAuth();
 
   useEffect(() => {
@@ -56,6 +58,84 @@ export const MemberDashboard: React.FC = () => {
     }).length;
   };
 
+  const handleQRScan = (qrData: string) => {
+    setShowQRScanner(false);
+    
+    // Parse QR code data (format: "gym:gymId:gymName")
+    const qrParts = qrData.split(':');
+    if (qrParts.length === 3 && qrParts[0] === 'gym') {
+      const scannedGymId = qrParts[1];
+      
+      // Verify the gym ID matches the member's gym
+      if (scannedGymId === memberData?.gymId) {
+        markAttendanceByQR();
+      } else {
+        toast({
+          title: "Error",
+          description: "This QR code is not for your gym",
+          variant: "destructive",
+        });
+      }
+    } else {
+      toast({
+        title: "Error",
+        description: "Invalid QR code format",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const markAttendanceByQR = () => {
+    if (!memberData) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    const allAttendance = JSON.parse(localStorage.getItem('gymSystemAttendance') || '[]');
+    
+    const existingAttendance = allAttendance.find((a: any) => 
+      a.memberId === memberData.id && a.date === today
+    );
+
+    if (existingAttendance && !existingAttendance.checkOut) {
+      // Member is already checked in, so this is a checkout
+      const updatedAttendance = allAttendance.map((a: any) => 
+        a.id === existingAttendance.id ? { ...a, checkOut: new Date().toLocaleTimeString() } : a
+      );
+      localStorage.setItem('gymSystemAttendance', JSON.stringify(updatedAttendance));
+      
+      toast({
+        title: "Success",
+        description: "Check-out marked successfully",
+      });
+      loadMemberData();
+      return;
+    }
+
+    if (existingAttendance && existingAttendance.checkOut) {
+      toast({
+        title: "Info",
+        description: "You have already completed attendance for today",
+      });
+      return;
+    }
+
+    const newAttendance = {
+      id: Date.now().toString(),
+      memberId: memberData.id,
+      gymId: memberData.gymId,
+      date: today,
+      checkIn: new Date().toLocaleTimeString()
+    };
+
+    const updatedAttendance = [...allAttendance, newAttendance];
+    localStorage.setItem('gymSystemAttendance', JSON.stringify(updatedAttendance));
+    
+    loadMemberData();
+    toast({
+      title: "Success",
+      description: "Check-in marked successfully",
+    });
+  };
+
   const currentPlan = getCurrentPlan();
   const monthlyAttendance = getAttendanceThisMonth();
 
@@ -78,6 +158,13 @@ export const MemberDashboard: React.FC = () => {
             <User className="mr-3 h-8 w-8 text-green-600" />
             Member Dashboard
           </h1>
+          <Button 
+            onClick={() => setShowQRScanner(true)}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            <Camera className="mr-2 h-4 w-4" />
+            Scan QR Code
+          </Button>
           <Button onClick={logout} variant="outline" className="flex items-center">
             <LogOut className="mr-2 h-4 w-4" />
             Logout
@@ -87,9 +174,18 @@ export const MemberDashboard: React.FC = () => {
 
       <div className="container mx-auto p-6">
         {/* Welcome Section */}
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-800 mb-2">Welcome back, {memberData.name}!</h2>
-          <p className="text-gray-600">Here's your gym activity overview</p>
+        <div className="mb-8 flex justify-between items-center">
+          <div>
+            <h2 className="text-3xl font-bold text-gray-800 mb-2">Welcome back, {memberData.name}!</h2>
+            <p className="text-gray-600">Here's your gym activity overview</p>
+          </div>
+          <Button 
+            onClick={() => setShowQRScanner(true)}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            <Camera className="mr-2 h-4 w-4" />
+            Scan QR Code
+          </Button>
         </div>
 
         {/* Stats Cards */}
@@ -264,6 +360,13 @@ export const MemberDashboard: React.FC = () => {
             )}
           </CardContent>
         </Card>
+
+        {showQRScanner && (
+          <QRCodeScanner
+            onScanSuccess={handleQRScan}
+            onClose={() => setShowQRScanner(false)}
+          />
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Gym, User } from '../types';
 import { Button } from './ui/button';
@@ -8,6 +7,7 @@ import { Label } from './ui/label';
 import { toast } from '@/hooks/use-toast';
 import { Plus, Edit, Trash2, Building2, Users, LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import QRCode from 'qrcode';
 
 export const SuperAdminDashboard: React.FC = () => {
   const [gyms, setGyms] = useState<Gym[]>([]);
@@ -33,7 +33,7 @@ export const SuperAdminDashboard: React.FC = () => {
     setGyms(storedGyms);
   };
 
-  const saveGym = () => {
+  const saveGym = async () => {
     if (!formData.name || !formData.adminUsername || !formData.adminPassword) {
       toast({
         title: "Error",
@@ -43,9 +43,14 @@ export const SuperAdminDashboard: React.FC = () => {
       return;
     }
 
+    // Generate QR code for the gym
+    const gymQRData = `gym:${editingGym?.id || Date.now().toString()}:${formData.name}`;
+    const qrCodeDataURL = await QRCode.toDataURL(gymQRData);
+
     const newGym: Gym = {
       id: editingGym?.id || Date.now().toString(),
       ...formData,
+      qrCode: qrCodeDataURL,
       createdAt: editingGym?.createdAt || new Date().toISOString()
     };
 

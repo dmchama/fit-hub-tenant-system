@@ -1,4 +1,3 @@
-
 export interface User {
   id: string;
   username: string;
@@ -16,6 +15,7 @@ export interface Gym {
   email: string;
   adminUsername: string;
   adminPassword: string;
+  qrCode: string;
   createdAt: string;
 }
 
